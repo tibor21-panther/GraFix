@@ -1,0 +1,6 @@
+{
+    "dc": "dc1.alpha.local",
+    "domain": "ALPHA",
+    "ldap_base": "DC=alpha,DC=local",
+    "allowed_group": "csoport1"
+}
