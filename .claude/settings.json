@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push * --force *)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -fd *)",
+      "Bash(git clean -f *)",
+      "Bash(git checkout . *)",
+      "Bash(git restore . *)",
+      "Bash(rm -rf /*)",
+      "Bash(del /s /q C:\\*)",
+      "Bash(format *)",
+      "Bash(dd *)",
+      "Bash(mkfs *)"
+    ],
+    "allow": [
+      "Bash",
+      "WebSearch",
+      "WebFetch",
+      "Read",
+      "Edit",
+      "Write",
+      "Task"
+    ],
+    "additionalDirectories": [
+      "c:\\github",
+      "c:\\GitHub\\tibor21-panther",
+      "c:\\GraFix"
+    ]
+  }
+}
