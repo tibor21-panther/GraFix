@@ -1,6 +1,12 @@
 {
-    "dc": "dc1.alpha.local",
-    "domain": "ALPHA",
-    "ldap_base": "DC=alpha,DC=local",
-    "allowed_group": "csoport1"
+    "dc":                 "dc1.alpha.local",
+    "port":               389,
+    "use_ssl":            false,
+    "domain":             "ALPHA",
+    "ldap_base":          "DC=alpha,DC=local",
+    "ldap_bind_user":     "ldap",
+    "ldap_bind_password": "CHANGE_ME",
+    "allowed_group":      "csoport1",
+    "connection_timeout": 5,
+    "app_title":          "AD Bejelentkezés"
 }

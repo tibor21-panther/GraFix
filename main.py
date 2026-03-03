@@ -72,6 +72,10 @@ def show_success(login_win, sam: str):
 def make_login_window(config: dict):
     win = _load_ui("GraFix1.ui")
 
+    # Ablak cím a config-ból (opcionális)
+    if config.get("app_title"):
+        win.setWindowTitle(config["app_title"])
+
     # Domain előtöltése a config-ból
     win.usernameEdit.setText(f"{config['domain']}\\")
 
