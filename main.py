@@ -8,48 +8,40 @@ from PySide6.QtCore import QFile, QIODevice
 
 import ldap_auth
 
-BASE        = Path(__file__).parent
-CONFIG_PATH = BASE / "config.json"
-LOGIN_UI    = BASE / "GraFix1.ui"
-SUCCESS_UI  = BASE / "success.ui"
+# ── Útvonalak ─────────────────────────────────────────────────────────────────
 
-# ── Stílusok ──────────────────────────────────────────────────────────────────
+def _base_dir() -> Path:
+    """Az exe melletti könyvtár (frozen) vagy a script mappája (dev)."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
 
-STYLE_TITLE = "font-size: 18px; font-weight: bold; margin-bottom: 4px;"
-STYLE_ERROR = "color: #cc0000; font-weight: bold;"
-STYLE_SUCCESS_LABEL = "color: #00aa44; font-size: 22px; font-weight: bold;"
-STYLE_USER_INFO = "color: #555555; font-size: 12px;"
 
-STYLE_LOGIN_BTN = """
-QPushButton {
-    background-color: #0078d4;
-    color: white;
-    border: none;
-    padding: 8px 0px;
-    border-radius: 4px;
-    font-size: 13px;
-}
-QPushButton:hover    { background-color: #106ebe; }
-QPushButton:pressed  { background-color: #005a9e; }
-QPushButton:disabled { background-color: #888888; }
-"""
+def _get_config_path() -> Path:
+    """
+    Először az exe melletti config/config.json-t keresi (külső, szerkeszthető).
+    Ha nem létezik, visszaesik a beágyazott verzióra.
+    """
+    external = _base_dir() / "config" / "config.json"
+    if external.exists():
+        return external
+    # Fallback: PyInstaller _MEIPASS vagy script mappa
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "config" / "config.json"
+    return Path(__file__).parent / "config" / "config.json"
 
-STYLE_CLOSE_BTN = """
-QPushButton {
-    background-color: #e0e0e0;
-    color: #222;
-    border: none;
-    padding: 7px 0px;
-    border-radius: 4px;
-    font-size: 13px;
-}
-QPushButton:hover   { background-color: #c8c8c8; }
-QPushButton:pressed { background-color: #aaaaaa; }
-"""
 
-# ── Segédfüggvény ──────────────────────────────────────────────────────────────
+def _ui_path(name: str) -> Path:
+    """UI fájl keresése: dev módban script mappa, frozen módban _MEIPASS."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / name
+    return Path(__file__).parent / name
 
-def _load_ui(path: Path):
+
+# ── UI betöltő ─────────────────────────────────────────────────────────────────
+
+def _load_ui(name: str):
+    path = _ui_path(name)
     loader = QUiLoader()
     f = QFile(str(path))
     f.open(QIODevice.ReadOnly)
@@ -58,59 +50,43 @@ def _load_ui(path: Path):
     return widget
 
 
-# ── Sikeres ablak ─────────────────────────────────────────────────────────────
+# ── Sikeres ablak ──────────────────────────────────────────────────────────────
 
 def show_success(login_win, sam: str):
-    win = _load_ui(SUCCESS_UI)
-    win.successLabel.setStyleSheet(STYLE_SUCCESS_LABEL)
-    win.userInfoLabel.setStyleSheet(STYLE_USER_INFO)
+    win = _load_ui("success.ui")
     win.userInfoLabel.setText(f"Üdvözöljük, {sam}!")
-    win.closeButton.setStyleSheet(STYLE_CLOSE_BTN)
     win.closeButton.clicked.connect(win.close)
 
-    # Ablak pozícionálása a login ablak fölé
     win.move(
         login_win.x() + (login_win.width()  - win.width())  // 2,
         login_win.y() + (login_win.height() - win.height()) // 2,
     )
     login_win.hide()
     win.show()
-
-    # Ha bezárja a success ablakot, ismét megjelenik a login
     win.finished.connect(lambda _: login_win.show())
-    return win  # referencia megőrzése
+    return win  # referencia megőrzése a GC ellen
 
 
-# ── Login ablak ───────────────────────────────────────────────────────────────
+# ── Login ablak ────────────────────────────────────────────────────────────────
 
 def make_login_window(config: dict):
-    win = _load_ui(LOGIN_UI)
+    win = _load_ui("GraFix1.ui")
 
-    # Cím stílus
-    win.titleLabel.setStyleSheet(STYLE_TITLE)
-
-    # Felhasználónév mező: domain előtöltése
+    # Domain előtöltése a config-ból
     win.usernameEdit.setText(f"{config['domain']}\\")
 
-    # Hiba label: kezdetben rejtett
-    win.errorLabel.setStyleSheet(STYLE_ERROR)
+    # Hiba label: kezdetben rejtett (tervezőben látszik, futáskor elrejtjük)
     win.errorLabel.hide()
-
-    # Gomb stílus
-    win.loginButton.setStyleSheet(STYLE_LOGIN_BTN)
-
-    # ── Bejelentkezés logika ──────────────────────────────────────────────────
 
     def on_login():
         username = win.usernameEdit.text().strip()
         password = win.passwordEdit.text()
 
         if not username or "\\" not in username or not password:
-            win.errorLabel.setText("Kérjük adja meg a felhasználónevet (DOMAIN\\user) és a jelszót")
+            win.errorLabel.setText("Kérjük adja meg a felhasználónevet és a jelszót")
             win.errorLabel.show()
             return
 
-        # UI letiltás a hívás idejére
         win.loginButton.setEnabled(False)
         win.loginButton.setText("Kérem várjon…")
         QApplication.processEvents()
@@ -122,7 +98,7 @@ def make_login_window(config: dict):
 
         if ok:
             win.errorLabel.hide()
-            win._success_win = show_success(win, msg)  # referencia
+            win._success_win = show_success(win, msg)
         else:
             win.errorLabel.setText(msg)
             win.errorLabel.show()
@@ -131,22 +107,21 @@ def make_login_window(config: dict):
 
     win.loginButton.clicked.connect(on_login)
     win.passwordEdit.returnPressed.connect(on_login)
-
     return win
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Entry point ────────────────────────────────────────────────────────────────
 
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    with open(CONFIG_PATH, encoding="utf-8") as f:
+    config_path = _get_config_path()
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
 
     login = make_login_window(config)
     login.show()
-
     sys.exit(app.exec())
 
 

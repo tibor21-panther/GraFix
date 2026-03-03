@@ -13,6 +13,9 @@
   <property name="windowTitle">
    <string>Sikeres bejelentkezés</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog { background-color: #f5f5f5; }</string>
+  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
     <number>16</number>
@@ -34,6 +37,9 @@
      <property name="text">
       <string>✓ Sikeres bejelentkezés</string>
      </property>
+     <property name="styleSheet">
+      <string notr="true">color: #00aa44; font-size: 22px; font-weight: bold;</string>
+     </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>
      </property>
@@ -42,7 +48,10 @@
    <item>
     <widget class="QLabel" name="userInfoLabel">
      <property name="text">
-      <string/>
+      <string>Üdvözöljük, felhasználó!</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: #555555; font-size: 12px;</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>
@@ -69,6 +78,18 @@
     <widget class="QPushButton" name="closeButton">
      <property name="text">
       <string>Bezárás</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    background-color: #e0e0e0;
+    color: #222222;
+    border: none;
+    padding: 8px 0px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+QPushButton:hover   { background-color: #c8c8c8; }
+QPushButton:pressed { background-color: #aaaaaa; }</string>
      </property>
      <property name="default">
       <bool>true</bool>
