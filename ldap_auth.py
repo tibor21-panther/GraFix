@@ -1,18 +1,11 @@
+import logging
 import ldap3
 from ldap3.core.exceptions import LDAPException
 
+log = logging.getLogger("grafix.ldap")
+
 
 def authenticate(username_input: str, password: str, config: dict) -> tuple[bool, str]:
-    """
-    AD hitelesítés két lépésben:
-      1. Service account binddal ellenőrzi, hogy a user létezik
-      2. User NTLM binddal ellenőrzi a jelszót
-      3. Service account kapcsolaton ellenőrzi a csoporttagságot
-
-    Returns:
-        (True,  sam_account_name)  – sikeres belépés, jogosult csoport tagja
-        (False, hibaüzenet)        – sikertelen
-    """
     dc              = config["dc"]
     port            = int(config.get("port", 389))
     use_ssl         = bool(config.get("use_ssl", False))
@@ -23,14 +16,18 @@ def authenticate(username_input: str, password: str, config: dict) -> tuple[bool
     allowed_group   = config["allowed_group"]
     timeout         = int(config.get("connection_timeout", 5))
 
-    # SAM kinyerése "DOMAIN\user" formátumból
     if "\\" in username_input:
         _, sam = username_input.split("\\", 1)
     else:
         sam = username_input
     sam = sam.strip()
 
+    log.info("=== Bejelentkezési kísérlet: %s ===", username_input)
+    log.info("DC: %s  port: %s  ssl: %s", dc, port, use_ssl)
+    log.info("ldap_base: %s  csoport: %s", ldap_base, allowed_group)
+
     if not sam or not password:
+        log.warning("Hiányzó felhasználónév vagy jelszó")
         return False, "Felhasználónév és jelszó megadása kötelező"
 
     try:
@@ -42,68 +39,91 @@ def authenticate(username_input: str, password: str, config: dict) -> tuple[bool
             connect_timeout=timeout,
         )
 
-        # ── 1. Service account bind (csoport és user kereséshez) ──────────────
+        # ── 1. Service account bind ────────────────────────────────────────────
         svc_conn = None
         if bind_user and bind_password:
+            svc_bind_dn = f"{domain}\\{bind_user}"
+            log.info("Service account bind kísérlet: %s", svc_bind_dn)
             svc_conn = ldap3.Connection(
                 server,
-                user=f"{domain}\\{bind_user}",
+                user=svc_bind_dn,
                 password=bind_password,
                 authentication=ldap3.NTLM,
                 raise_exceptions=False,
             )
-            if not svc_conn.bind():
+            result = svc_conn.bind()
+            log.info("Service account bind eredmény: %s | result: %s | desc: %s",
+                     result, svc_conn.result.get("result"), svc_conn.result.get("description"))
+            if not result:
+                log.error("Service account bind sikertelen: %s", svc_conn.result)
                 return False, "LDAP service account kapcsolat sikertelen (ellenőrizd a config-ot)"
+        else:
+            log.warning("Service account nincs megadva a config-ban — service bind kihagyva")
 
         # ── 2. Felhasználó NTLM bind (jelszó ellenőrzés) ──────────────────────
+        user_bind_dn = f"{domain}\\{sam}"
+        log.info("User bind kísérlet: %s", user_bind_dn)
         user_conn = ldap3.Connection(
             server,
-            user=f"{domain}\\{sam}",
+            user=user_bind_dn,
             password=password,
             authentication=ldap3.NTLM,
             raise_exceptions=False,
         )
-        if not user_conn.bind():
+        result = user_conn.bind()
+        log.info("User bind eredmény: %s | result: %s | desc: %s",
+                 result, user_conn.result.get("result"), user_conn.result.get("description"))
+        if not result:
+            log.warning("User bind sikertelen: %s", user_conn.result)
             if svc_conn:
                 svc_conn.unbind()
             return False, "Sikertelen bejelentkezés: hibás felhasználónév vagy jelszó"
 
         # ── 3. Csoporttagság ellenőrzés ────────────────────────────────────────
-        # Service account connectionen keresünk (ha van), különben user connon
         search_conn = svc_conn if svc_conn else user_conn
 
-        # Csoport DN keresése (OU-tól független)
-        search_conn.search(
-            ldap_base,
-            f"(&(objectClass=group)(cn={allowed_group}))",
-            attributes=["distinguishedName"],
-        )
+        group_filter = f"(&(objectClass=group)(cn={allowed_group}))"
+        log.info("Csoport keresés — filter: %s  base: %s", group_filter, ldap_base)
+        search_conn.search(ldap_base, group_filter, attributes=["distinguishedName"])
+        log.info("Csoport keresés találatok: %d  |  %s",
+                 len(search_conn.entries),
+                 [str(e.distinguishedName) for e in search_conn.entries])
+
         if not search_conn.entries:
             user_conn.unbind()
             if svc_conn:
                 svc_conn.unbind()
+            log.error("Csoport nem található: %s", allowed_group)
             return False, f"A '{allowed_group}' csoport nem található a könyvtárban"
 
         group_dn = search_conn.entries[0].distinguishedName.value
+        log.info("Csoport DN: %s", group_dn)
 
-        # Rekurzív csoporttagság (LDAP_MATCHING_RULE_IN_CHAIN)
-        ldap_filter = (
+        user_filter = (
             f"(&(objectClass=person)"
             f"(sAMAccountName={sam})"
             f"(memberOf:1.2.840.113556.1.4.1941:={group_dn}))"
         )
-        search_conn.search(ldap_base, ldap_filter, attributes=["sAMAccountName"])
+        log.info("User csoporttagság keresés — filter: %s", user_filter)
+        search_conn.search(ldap_base, user_filter, attributes=["sAMAccountName"])
+        log.info("Csoporttagság találatok: %d  |  %s",
+                 len(search_conn.entries),
+                 [str(e.sAMAccountName) for e in search_conn.entries])
 
         user_conn.unbind()
         if svc_conn:
             svc_conn.unbind()
 
         if not search_conn.entries:
+            log.warning("User '%s' nincs a '%s' csoportban", sam, allowed_group)
             return False, f"Hozzáférés megtagadva: a '{allowed_group}' csoportba kell tartoznia"
 
+        log.info("Sikeres bejelentkezés: %s", sam)
         return True, sam
 
     except LDAPException as e:
+        log.exception("LDAPException: %s", e)
         return False, f"LDAP kapcsolati hiba: {e}"
     except Exception as e:
+        log.exception("Váratlan hiba: %s", e)
         return False, f"Váratlan hiba: {e}"

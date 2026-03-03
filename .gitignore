@@ -1,3 +1,6 @@
+# Futásidejű log
+log/
+
 # PyInstaller
 dist/
 build/
