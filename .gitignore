@@ -6,6 +6,9 @@ dist/
 build/
 *.spec
 
+# Generált assets (forrás: create_icon.py)
+assets/
+
 # Python
 __pycache__/
 *.pyc

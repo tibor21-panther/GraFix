@@ -3,7 +3,9 @@ echo =========================================
 echo  GraFix build
 echo =========================================
 
+python create_icon.py
 python -m PyInstaller --noconfirm --onefile --windowed ^
+    --icon "assets/icon.ico" ^
     --name GraFix ^
     --add-data "GraFix1.ui;." ^
     --add-data "success.ui;." ^
