@@ -8,6 +8,9 @@ python -m PyInstaller --noconfirm --onefile --windowed ^
     --add-data "GraFix1.ui;." ^
     --add-data "success.ui;." ^
     --add-data "config/config.json;config" ^
+    --hidden-import Crypto ^
+    --hidden-import Crypto.Hash ^
+    --hidden-import Crypto.Hash.MD4 ^
     main.py
 
 if %ERRORLEVEL% NEQ 0 (
